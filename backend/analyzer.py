@@ -39,28 +39,37 @@ class VLMAnalyzer:
 
     def _run_gemini_analysis(self, image_path: str, lang: str) -> Dict[str, Any]:
         """
-        Calls Gemini API via HTTPS using the GEMINI_API_KEY environment variable.
+        Calls Gemini API using the official Google GenAI SDK.
         """
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            print("[LoafRate AI] google-generativeai package is not installed. Falling back to mock.")
+            return self._run_pseudo_scientific_analysis(image_path, lang)
+
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             print("[LoafRate AI] Warning: GEMINI_API_KEY is not set. Falling back to mock analysis.")
             return self._run_pseudo_scientific_analysis(image_path, lang)
-        
-        try:
-            with open(image_path, "rb") as image_file:
-                image_data = base64.b64encode(image_file.read()).decode("utf-8")
-            
-            # Detect MIME type
-            mime_type = "image/jpeg"
-            if image_path.lower().endswith(".png"):
-                mime_type = "image/png"
-            elif image_path.lower().endswith(".webp"):
-                mime_type = "image/webp"
 
-            # Model to use — set via GEMINI_MODEL_ID env var (default: gemini-2.5-flash)
-            gemini_model = os.environ.get("GEMINI_MODEL_ID", "gemini-2.5-flash")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
-            
+        # Инициализация клиента (можно вынести в __init__ позже)
+        genai.configure(api_key=api_key)
+
+        # Модель (можно задать через GEMINI_MODEL_ID)
+        gemini_model = os.environ.get("GEMINI_MODEL_ID", "gemini-2.5-flash")  # или gemini-2.5-pro и т.д.
+
+        try:
+            model = genai.GenerativeModel(
+                model_name=gemini_model,
+                generation_config={
+                    "response_mime_type": "application/json",
+                    "temperature": 0.2,
+                }
+            )
+
+            # Загружаем изображение
+            image = Image.open(image_path)
+
             prompt = f"""You are a STRICT feline batonization (loafness) judge. Rate this cat specimen CRITICALLY - do NOT be lenient.
 A true loaf (батон) is a SPECIFIC pose with MANDATORY requirements:
 - ALL 4 paws MUST be tucked underneath the body (not extended, not partially visible)
@@ -118,42 +127,23 @@ If {lang}=="en": all comments only in English, no Russian words
 JUDGE STRICTLY. DO NOT INFLATE SCORES. Base ratings on actual observable loaf form.
 """
 
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": prompt},
-                            {
-                                "inlineData": {
-                                    "mimeType": mime_type,
-                                    "data": image_data
-                                }
-                            }
-                        ]
-                    }
-                ],
-                "generationConfig": {
-                    "responseMimeType": "application/json"
-                }
-            }
+            response = model.generate_content(
+                contents=[prompt, image],
+                request_options={"timeout": 25}
+            )
 
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(url, json=payload, headers=headers, timeout=25)
-            response.raise_for_status()
-            
-            res_json = response.json()
-            text_content = res_json["candidates"][0]["content"]["parts"][0]["text"]
+            text_content = response.text
             parsed_report = self._parse_json_report(text_content)
-            
-            # Just to guarantee structure safety
+
+            # Проверка структуры
             for key in ["scores", "final_score", "class", "verdict", "roast"]:
                 if key not in parsed_report:
-                    raise KeyError(f"Missing key in VLM response: {key}")
-                    
+                    raise KeyError(f"Missing key in Gemini response: {key}")
+
             return parsed_report
-            
+
         except Exception as e:
-            print(f"[LoafRate AI] Cloud VLM call failed: {e}. Falling back to mock analysis.")
+            print(f"[LoafRate AI] Gemini SDK call failed: {e}. Falling back to mock analysis.")
             return self._run_pseudo_scientific_analysis(image_path, lang)
 
     def _run_local_vlm_analysis(self, image_path: str, lang: str) -> Dict[str, Any]:
@@ -192,47 +182,49 @@ JUDGE STRICTLY. DO NOT INFLATE SCORES. Base ratings on actual observable loaf fo
                 return self._run_pseudo_scientific_analysis(image_path, lang)
 
         try:
-            prompt = f"""You are a STRICT feline batonization judge. Rate this cat CRITICALLY.
+            prompt = f"""Ты — крайне строгий и придирчивый судья кошачьей батонизации (loaf judge). 
+Твоя задача — оценивать котов максимально жёстко и без жалости.
 
-LOAF POSE REQUIREMENTS (mandatory):
-- ALL 4 paws MUST be tucked underneath the body
-- Tail MUST be hidden
-- Body compressed into rectangular shape
-NOT meeting these = scores ≤ 5.0 max
+Настоящий "батон" (loaf) имеет СТРОГИЕ обязательные признаки:
+- ВСЕ 4 лапы полностью спрятаны под телом (ни одна лапа не должна быть видна или торчать)
+- Хвост полностью скрыт или плотно обёрнут вокруг тела
+- Тело сильно сжато в компактный прямоугольник
+- Голова опущена или на одном уровне с телом
 
-Rate 0-10 (be HARSH):
-1. Paw Concealment: Are ALL 4 paws hidden?
-2. Loaf Geometry: Is body in proper loaf pose?
-3. Compression Density: Is body compact and dense?
-4. Mental State: Is cat committed to loaf?
-5. Fur Texture: Coat quality (LEAST important)
+Если хотя бы один из этих пунктов нарушен — это НЕ батон. Максимальная оценка в таком случае — 5.0.
 
-KEEP COMMENTS BRIEF (1-2 sentences max).
-Return ONLY valid JSON, nothing else:
+Оценивай по шкале 0.0–10.0 ОЧЕНЬ ЖЁСТКО:
+
+1. Paw Concealment — Все 4 лапы действительно спрятаны?
+2. Loaf Geometry — Тело имеет чёткую loaf-форму или просто лежит?
+3. Compression Density — Насколько сильно сжато тело?
+4. Mental Loaf State — Кот расслаблен и committed к позе?
+5. Fur Texture — Качество шерсти (наименее важный параметр)
+
+Правила:
+- Если кот НЕ в правильной loaf-позе → оценки paw_concealment, loaf_geometry и compression_density не выше 5.0
+- Не льсти. Не оправдывай. Будь максимально критичным.
+- Комментарии должны быть короткими (1-2 предложения).
+
+Верни ТОЛЬКО валидный JSON, без всякого дополнительного текста:
 
 {{
   "scores": {{
-    "paw_concealment": {{"score": 5.0, "comment": "brief analysis in {lang}"}},
-    "loaf_geometry": {{"score": 5.0, "comment": "brief analysis in {lang}"}},
-    "compression_density": {{"score": 5.0, "comment": "brief analysis in {lang}"}},
-    "mental_loaf_state": {{"score": 5.0, "comment": "brief analysis in {lang}"}},
-    "fur_texture_rating": {{"score": 5.0, "comment": "brief analysis in {lang}"}}
+    "paw_concealment": {{"score": float, "comment": "короткий комментарий на {lang}"}},
+    "loaf_geometry": {{"score": float, "comment": "короткий комментарий на {lang}"}},
+    "compression_density": {{"score": float, "comment": "короткий комментарий на {lang}"}},
+    "mental_loaf_state": {{"score": float, "comment": "короткий комментарий на {lang}"}},
+    "fur_texture_rating": {{"score": float, "comment": "короткий комментарий на {lang}"}}
   }},
-  "final_score": 5.0,
-  "class": "Partial Loaf",
-  "verdict": "brief verdict in {lang}",
-  "roast": "brief roast in {lang}"
+  "final_score": float,
+  "class": "string",
+  "verdict": "string",
+  "roast": "string"
 }}
 
-Scoring: final_score = paw*0.3 + geometry*0.25 + density*0.2 + mental*0.15 + fur*0.1
-
-Classes (strict):
-<3.0: Cat Failure | 3-4.9: Partial Loaf | 5-6.9: Domestic Loaf | 7-8.9: Advanced Baton | 9-9.4: Elite Loaf | ≥9.5: Ascended Bread Entity
-
-Russian: "Крах Батонизации" | "Недобулка" | "Домашний Батон" | "Продвинутый Батон" | "Элитный Батон" | "Вознесшаяся Буханка"
-
-Language: {lang}. NO ENGLISH WORDS IN {lang} TEXT.
-Judge strictly. Base scores on actual loaf form."""
+Language: {lang}. Если ru — всё только на русском языке.
+Судьи строго. Не завышай оценки.
+"""
 
             messages = [
                 {
