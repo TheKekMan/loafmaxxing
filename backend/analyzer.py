@@ -61,46 +61,61 @@ class VLMAnalyzer:
             gemini_model = os.environ.get("GEMINI_MODEL_ID", "gemini-2.5-flash")
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
             
-            prompt = f"""You are an expert feline batonization (loafness) engineer. Rate this cat specimen in a looksmaxxing-inspired, pseudo-scientific, meme-heavy tone.
-Analyze the following parameters on a scale of 0.0 to 10.0:
-1. Paw Concealment (tuckcel vs breadmogger: measures how well paws and limbs are concealed)
-2. Loaf Geometry (potato-form silhouette: curvature, symmetry and roundedness of the cat)
-3. Compression Density (vacuum packed index: compactness and lack of hollow space)
-4. Mental State (zen loaf vs combat loaf: how relaxed and unbothered the cat looks)
-5. Fur Texture (sourdough crust rating: toastiness and quality of the outer coat/crust)
+            prompt = f"""You are a STRICT feline batonization (loafness) judge. Rate this cat specimen CRITICALLY - do NOT be lenient.
+A true loaf (батон) is a SPECIFIC pose with MANDATORY requirements:
+- ALL 4 paws MUST be tucked underneath the body (not extended, not partially visible)
+- Tail MUST be completely hidden or wrapped around the body
+- Head should be lowered or level with the body
+- Entire body compressed into a compact, rectangular loaf shape
+- If ANY of these are missing/wrong, deduct significantly
 
-Return a JSON object with this exact structure:
+Analyze ONLY these parameters on a scale of 0.0 to 10.0. Be harsh:
+1. Paw Concealment - Are ALL 4 paws truly hidden? Partially visible = major deduction
+2. Loaf Geometry - Is the body actually in loaf pose? Not just laying - must be compressed loaf form
+3. Compression Density - Is the body genuinely compact? Loose/sprawled = low score
+4. Mental State - Does the cat look relaxed or tense? Is it actually committed to the loaf?
+5. Fur Texture - Coat quality (separate from pose, but affects overall impression)
+
+CRITICAL: If the cat is NOT in proper loaf pose, scores MUST be lower (5.0 max for paw/geometry/density).
+
+Return a JSON object with this structure:
 {{
   "scores": {{
-    "paw_concealment": {{"score": float, "comment": "string"}},
-    "loaf_geometry": {{"score": float, "comment": "string"}},
-    "compression_density": {{"score": float, "comment": "string"}},
-    "mental_loaf_state": {{"score": float, "comment": "string"}},
-    "fur_texture_rating": {{"score": float, "comment": "string"}}
+    "paw_concealment": {{"score": float, "comment": "string in {lang}"}},
+    "loaf_geometry": {{"score": float, "comment": "string in {lang}"}},
+    "compression_density": {{"score": float, "comment": "string in {lang}"}},
+    "mental_loaf_state": {{"score": float, "comment": "string in {lang}"}},
+    "fur_texture_rating": {{"score": float, "comment": "string in {lang}"}}
   }},
-  "final_score": float (weighted average: paw*0.3 + geometry*0.25 + density*0.2 + mental*0.15 + fur*0.1),
-  "class": "string",
-  "verdict": "string",
-  "roast": "string"
+  "final_score": float,
+  "class": "string in {lang}",
+  "verdict": "string in {lang}",
+  "roast": "string in {lang}"
 }}
 
-Class guidelines based on final_score:
-- < 3.0: Cat Failure
-- 3.0 to 4.9: Partial Loaf
-- 5.0 to 6.9: Domestic Loaf
-- 7.0 to 8.9: Advanced Baton
-- 9.0 to 9.4: Elite Loaf
-- 9.5+: Ascended Bread Entity
+Scoring formula: final_score = (paw*0.3 + geometry*0.25 + density*0.2 + mental*0.15 + fur*0.1)
 
-Language requirements:
-You MUST return all strings (comments, class name, verdict, roast) in the requested language: {lang}.
-If language is "ru", translate the classes exactly as:
+Class guidelines based on final_score (STRICT):
+- < 3.0: Cat Failure - Not a loaf, just a puddle
+- 3.0 to 4.9: Partial Loaf - Attempting but failing
+- 5.0 to 6.9: Domestic Loaf - Barely acceptable form
+- 7.0 to 8.9: Advanced Baton - Legitimate form with minor issues
+- 9.0 to 9.4: Elite Loaf - Proper technique, well executed
+- 9.5+: Ascended Bread Entity - Perfect loaf form
+
+Russian translations:
 - Cat Failure -> "Крах Батонизации"
 - Partial Loaf -> "Недобулка"
 - Domestic Loaf -> "Домашний Батон"
 - Advanced Baton -> "Продвинутый Батон"
 - Elite Loaf -> "Элитный Батон"
 - Ascended Bread Entity -> "Вознесшаяся Буханка"
+
+Language: {lang}
+If {lang}=="ru": все комментарии только на русском, без английских слов
+If {lang}=="en": all comments only in English, no Russian words
+
+JUDGE STRICTLY. DO NOT INFLATE SCORES. Base ratings on actual observable loaf form.
 """
 
             payload = {
@@ -145,12 +160,13 @@ If language is "ru", translate the classes exactly as:
         """
         Loads a local Qwen-family VLM lazily and runs local inference.
         """
+        import torch
+        from transformers import AutoProcessor
+        from qwen_vl_utils import process_vision_info
+        
         if self.model is None:
             print("[LoafRate AI] Lazy loading local Qwen-family VLM model (GPU/CPU)...")
             try:
-                import torch
-                from transformers import AutoProcessor
-                
                 model_path = self.model_path
                 if not model_path or not os.path.exists(model_path):
                     # Check default location
@@ -176,49 +192,47 @@ If language is "ru", translate the classes exactly as:
                 return self._run_pseudo_scientific_analysis(image_path, lang)
 
         try:
-            from qwen_vl_utils import process_vision_info
-            
-            prompt = f"""You are an expert feline batonization (loafness) engineer. Rate this cat specimen in a looksmaxxing-inspired, pseudo-scientific, meme-heavy tone.
-Analyze the following parameters on a scale of 0.0 to 10.0:
-1. Paw Concealment (tuckcel vs breadmogger: measures how well paws and limbs are concealed)
-2. Loaf Geometry (potato-form silhouette: curvature, symmetry and roundedness of the cat)
-3. Compression Density (vacuum packed index: compactness and lack of hollow space)
-4. Mental State (zen loaf vs combat loaf: how relaxed and unbothered the cat looks)
-5. Fur Texture (sourdough crust rating: toastiness and quality of the outer coat/crust)
+            prompt = f"""You are a STRICT feline batonization judge. Rate this cat CRITICALLY.
 
-Return a JSON object with this exact structure:
+LOAF POSE REQUIREMENTS (mandatory):
+- ALL 4 paws MUST be tucked underneath the body
+- Tail MUST be hidden
+- Body compressed into rectangular shape
+NOT meeting these = scores ≤ 5.0 max
+
+Rate 0-10 (be HARSH):
+1. Paw Concealment: Are ALL 4 paws hidden?
+2. Loaf Geometry: Is body in proper loaf pose?
+3. Compression Density: Is body compact and dense?
+4. Mental State: Is cat committed to loaf?
+5. Fur Texture: Coat quality (LEAST important)
+
+KEEP COMMENTS BRIEF (1-2 sentences max).
+Return ONLY valid JSON, nothing else:
+
 {{
   "scores": {{
-    "paw_concealment": {{"score": float, "comment": "string"}},
-    "loaf_geometry": {{"score": float, "comment": "string"}},
-    "compression_density": {{"score": float, "comment": "string"}},
-    "mental_loaf_state": {{"score": float, "comment": "string"}},
-    "fur_texture_rating": {{"score": float, "comment": "string"}}
+    "paw_concealment": {{"score": 5.0, "comment": "brief analysis in {lang}"}},
+    "loaf_geometry": {{"score": 5.0, "comment": "brief analysis in {lang}"}},
+    "compression_density": {{"score": 5.0, "comment": "brief analysis in {lang}"}},
+    "mental_loaf_state": {{"score": 5.0, "comment": "brief analysis in {lang}"}},
+    "fur_texture_rating": {{"score": 5.0, "comment": "brief analysis in {lang}"}}
   }},
-  "final_score": float (weighted average: paw*0.3 + geometry*0.25 + density*0.2 + mental*0.15 + fur*0.1),
-  "class": "string",
-  "verdict": "string",
-  "roast": "string"
+  "final_score": 5.0,
+  "class": "Partial Loaf",
+  "verdict": "brief verdict in {lang}",
+  "roast": "brief roast in {lang}"
 }}
 
-Class guidelines based on final_score:
-- < 3.0: Cat Failure
-- 3.0 to 4.9: Partial Loaf
-- 5.0 to 6.9: Domestic Loaf
-- 7.0 to 8.9: Advanced Baton
-- 9.0 to 9.4: Elite Loaf
-- 9.5+: Ascended Bread Entity
+Scoring: final_score = paw*0.3 + geometry*0.25 + density*0.2 + mental*0.15 + fur*0.1
 
-Language requirements:
-You MUST return all strings (comments, class name, verdict, roast) in the requested language: {lang}.
-If language is "ru", translate the classes exactly as:
-- Cat Failure -> "Крах Батонизации"
-- Partial Loaf -> "Недобулка"
-- Domestic Loaf -> "Домашний Батон"
-- Advanced Baton -> "Продвинутый Батон"
-- Elite Loaf -> "Элитный Батон"
-- Ascended Bread Entity -> "Вознесшаяся Буханка"
-"""
+Classes (strict):
+<3.0: Cat Failure | 3-4.9: Partial Loaf | 5-6.9: Domestic Loaf | 7-8.9: Advanced Baton | 9-9.4: Elite Loaf | ≥9.5: Ascended Bread Entity
+
+Russian: "Крах Батонизации" | "Недобулка" | "Домашний Батон" | "Продвинутый Батон" | "Элитный Батон" | "Вознесшаяся Буханка"
+
+Language: {lang}. NO ENGLISH WORDS IN {lang} TEXT.
+Judge strictly. Base scores on actual loaf form."""
 
             messages = [
                 {
@@ -244,7 +258,7 @@ If language is "ru", translate the classes exactly as:
             inputs = inputs.to(self.model.device)
 
             with torch.no_grad():
-                generated_ids = self.model.generate(**inputs, max_new_tokens=512)
+                generated_ids = self.model.generate(**inputs, max_new_tokens=1024, temperature=0.3)
                 
             generated_ids_trimmed = [
                 out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
@@ -283,23 +297,121 @@ If language is "ru", translate the classes exactly as:
     def _parse_json_report(self, text: str) -> Dict[str, Any]:
         """
         Parse JSON from direct API JSON responses or markdown-fenced model text.
+        Handles malformed, truncated JSON with better recovery strategies.
         """
+        import re
+        
         cleaned = text.strip()
+        
+        # Remove markdown code fences
         if cleaned.startswith("```"):
-            cleaned = cleaned.strip("`").strip()
-            if cleaned.lower().startswith("json"):
-                cleaned = cleaned[4:].strip()
-
+            cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+            cleaned = re.sub(r'\s*```$', '', cleaned)
+            cleaned = cleaned.strip()
+        
+        # Find the start of JSON
         if not cleaned.startswith("{"):
             start = cleaned.find("{")
-            end = cleaned.rfind("}")
-            if start >= 0 and end > start:
-                cleaned = cleaned[start:end + 1]
-
-        parsed_report = json.loads(cleaned)
+            if start >= 0:
+                cleaned = cleaned[start:]
+        
+        # Try to intelligently complete truncated JSON
+        if cleaned.startswith("{"):
+            # Count unmatched quotes and braces
+            brace_count = 0
+            in_string = False
+            escape_next = False
+            last_key = None
+            
+            for i, char in enumerate(cleaned):
+                if escape_next:
+                    escape_next = False
+                    continue
+                    
+                if char == '\\' and in_string:
+                    escape_next = True
+                    continue
+                
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    # Track keys for incomplete object detection
+                    if not in_string and i+1 < len(cleaned) and cleaned[i+1:i+2] == ':':
+                        # This was a key
+                        key_start = cleaned.rfind('"', 0, i-1)
+                        if key_start >= 0:
+                            last_key = cleaned[key_start+1:i]
+                    continue
+                
+                if not in_string:
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+            
+            # If JSON is incomplete, try to complete it
+            if in_string or brace_count > 0:
+                # Close any open string
+                if in_string:
+                    cleaned = cleaned + '"'
+                # Close any open braces
+                if brace_count > 0:
+                    cleaned = cleaned + "}" * brace_count
+        
+        # Try to parse with various fallback strategies
+        parse_attempts = [
+            (cleaned, "original"),
+            (cleaned.replace('«', '"').replace('»', '"').replace('"', '"').replace('"', '"'), "quote_replacement"),
+        ]
+        
+        parsed_report = None
+        last_error = None
+        
+        for attempt_text, attempt_name in parse_attempts:
+            try:
+                parsed_report = json.loads(attempt_text)
+                break
+            except json.JSONDecodeError as e:
+                last_error = e
+                continue
+        
+        if parsed_report is None:
+            # Last resort: try to extract and salvage what we can
+            print(f"[LoafRate AI] JSON parsing attempts failed: {last_error}")
+            print(f"[LoafRate AI] Raw response (first 500 chars): {text[:500]}")
+            print(f"[LoafRate AI] Cleaned JSON (first 500 chars): {cleaned[:500]}")
+            
+            # Return fallback with generic scores
+            parsed_report = {
+                "scores": {
+                    "paw_concealment": {"score": 3.0, "comment": "Parsing error - review required"},
+                    "loaf_geometry": {"score": 3.0, "comment": "Parsing error - review required"},
+                    "compression_density": {"score": 3.0, "comment": "Parsing error - review required"},
+                    "mental_loaf_state": {"score": 3.0, "comment": "Parsing error - review required"},
+                    "fur_texture_rating": {"score": 3.0, "comment": "Parsing error - review required"}
+                },
+                "final_score": 3.0,
+                "class": "Partial Loaf",
+                "verdict": "VLM parsing error - fallback scores applied",
+                "roast": "Model response was truncated/malformed"
+            }
+            # Don't raise, just return with fallback scores
+            return parsed_report
+        
+        # Validate required keys exist
         for key in ["scores", "final_score", "class", "verdict", "roast"]:
             if key not in parsed_report:
-                raise KeyError(f"Missing key in VLM response: {key}")
+                # Add missing keys with defaults
+                if key == "scores":
+                    parsed_report["scores"] = {
+                        "paw_concealment": {"score": 3.0, "comment": "Missing"},
+                        "loaf_geometry": {"score": 3.0, "comment": "Missing"},
+                        "compression_density": {"score": 3.0, "comment": "Missing"},
+                        "mental_loaf_state": {"score": 3.0, "comment": "Missing"},
+                        "fur_texture_rating": {"score": 3.0, "comment": "Missing"}
+                    }
+                else:
+                    parsed_report[key] = f"Missing ({key})"
+        
         return parsed_report
 
     def _run_pseudo_scientific_analysis(self, image_path: str, lang: str) -> Dict[str, Any]:
@@ -356,74 +468,74 @@ If language is "ru", translate the classes exactly as:
 
         VERDICTS = {
             "en": [
-                "Severe structural breakdown. Complete tuck failure and absolute paw leakage. This is a puddle, not a loaf.",
-                "Sub-optimal compacting. Tail is visible and front limbs are displaying clear leakage.",
-                "A standard, respectable household loaf. Average compactness and decent tuck discipline.",
-                "Highly polished potato-form. Exceptional tuck discipline and minimal paw leakage.",
-                "Masterclass in batonization. Spherical-cylindrical perfection. Paws and tail have successfully entered the shadow dimension.",
-                "Sourdough ascension achieved. The cat has transcended feline form and become 100% pure bread. All limbs, tails, and ears are fully integrated."
+                "Catastrophic structural failure. Complete tuck collapse, paws everywhere, tail wagging. Not a loaf, it's a crime scene.",
+                "Pathetic attempt at loafing. Half-hearted pose with obvious limb leakage. Try harder.",
+                "Barely acceptable loaf form. Competent but uninspiring. It's adequate, nothing more.",
+                "Respectable loaf technique. Most paws hidden, decent compression. Still has room for improvement.",
+                "Solid loaf execution. Form is maintained properly with minimal issues. Getting close to elite tier.",
+                "Near-perfect loaf mastery. Flawless paw concealment, absolute geometric precision. Barely any flaws to criticize."
             ],
             "ru": [
-                "Критический сбой структуры. Полный провал поджатия лап и абсолютная утечка конечностей. Это лужа, а не батон.",
-                "Субоптимальное сжатие. Виден хвост, а передние лапы демонстрируют явную утечку.",
-                "Стандартный домашний батон. Средняя компактность и неплохая дисциплина поджатия.",
-                "Отполированная картофельная форма. Исключительная дисциплина поджатия и минимальная утечка лап.",
-                "Мастер-класс батонизации. Сферически-цилиндрическое совершенство. Лапки и хвост скрылись в теневом измерении.",
-                "Достигнуто вознесение чиабатты! Кот превзошел кошачью форму и стал на 100% чистым хлебом. Все лапы, хвост и уши полностью интегрированы."
+                "Катастрофический провал. Лапы торчат со всех сторон, хвост трепыхается. Это не батон, это беспорядок.",
+                "Жалкая попытка батонизации. Половинчатая поза с явной утечкой конечностей. Попробуй еще раз.",
+                "Едва приемлемый батон. Компетентно, но скучно. Это просто адекватно, не более того.",
+                "Уважаемое мастерство батонизации. Большинство лап спрятаны, приличное сжатие. Но есть еще куда расти.",
+                "Твердое исполнение батона. Форма держится хорошо, минимум проблем. Близко к элитному уровню.",
+                "Почти идеальное мастерство батона. Безупречное поджатие лап, абсолютная геометрическая точность. Практически без изъянов."
             ]
         }
 
         ROASTS = {
             "en": {
                 "failure": [
-                    "Unacceptable tuckcel behavior. Paws are fully extended, tail is dragging, zero core tension. Go back to loaf boot camp.",
-                    "Complete structural compromise. This cat has dissolved into a liquid state. Absolute zero bread aura."
+                    "Catastrophic failure. Paws everywhere, no compression whatsoever. This isn't a loaf, it's an explosion.",
+                    "Not even trying. This is just a cat lying down badly. Zero loaf commitment detected."
                 ],
                 "partial": [
-                    "A classic tuckcel. Tried to loaf but left the kickstands down. 4/10 on the breadmogger scale.",
-                    "Partial loaf attempt. Back paws are showing. Clearly lack the mental discipline of a true sourdough."
+                    "Lazy attempt. Some paws are hidden but others are flopping out. Inconsistent discipline.",
+                    "Half measures. You can't be 'kind of' in a loaf. Either commit or don't."
                 ],
                 "domestic": [
-                    "Decent tuck, but mentally still paying taxes. Very domestic, zero cosmic energy.",
-                    "Not bad, but a bit sourdough-deficient. Good for beginners, but won't be breadmogging anyone soon."
+                    "Acceptable but uninspired. It's a loaf, technically. But barely worth mentioning.",
+                    "Competent mediocrity. Gets the job done but shows no ambition or style."
                 ],
                 "advanced": [
-                    "Solid execution. Almost fully vacuum packed. Breadmogging 95% of domestic cats in a 5-mile radius.",
-                    "Advanced batonization. Smooth contours, high density. Almost zero paw leakage detected. Respectable."
+                    "Solid work here. Form is maintained well, paws are mostly hidden. Could be better, could be worse.",
+                    "Respectable execution. Nearly there but still missing that final polish."
                 ],
                 "elite": [
-                    "Elite breadmogger. Absolute tuck god. Paws are in another dimension. Highly densepilled.",
-                    "Vacuum packed to absolute perfection. No leakage, pure aerodynamic loaf geometry. An absolute unit."
+                    "Excellent form. This cat knows what it's doing. Nearly flawless paw concealment.",
+                    "High-quality loaf. Proper technique from start to finish. Very few criticisms."
                 ],
                 "ascended": [
-                    "We are witnessing a sourdough ascension. He is breadmogging the entire universe. Complete zen state achieved.",
-                    "Ascended beyond physical limitations. Zero paw leakage. This isn't a cat, it's a fresh boule straight from the cosmic oven."
+                    "Perfection achieved. Absolutely no paw leakage, immaculate form. Nothing left to criticize.",
+                    "True mastery. This cat has transcended and become one with the loaf. Exceptional."
                 ]
             },
             "ru": {
                 "failure": [
-                    "Недопустимое поведение лапоцеля. Лапы полностью вытянуты, хвост волочится, напряжение кора нулевое. Возвращайся в учебку батонизации.",
-                    "Полный компромисс структуры. Этот кот растворился до жидкого состояния. Абсолютно нулевая аура хлеба."
+                    "Катастрофический провал. Лапы торчат везде, никакого сжатия. Это не батон, это взрыв.",
+                    "Даже не пытается. Это просто кот, лежащий неправильно. Ноль приверженности батону."
                 ],
                 "partial": [
-                    "Классический лапоцель. Пытался сжаться в батон, но оставил подножки выставленными. 4/10 по шкале хлебомога.",
-                    "Попытка частичного батона. Задние лапы торчат. Очевидно отсутствие ментальной дисциплины истинного хлеба."
+                    "Ленивая попытка. Некоторые лапы спрятаны, но другие торчат. Непоследовательная дисциплина.",
+                    "Полумеры. Нельзя быть 'почти' в батоне. Либо выполняй, либо нет."
                 ],
                 "domestic": [
-                    "Неплохое поджатие, но ментально всё ещё платит налоги. Слишком домашний, ноль космической энергии.",
-                    "Нормально, но не хватает закваски. Хорошо для новичков, но вряд ли кого-то затмит в хлебомоггинге."
+                    "Приемлемо, но неинтересно. Это батон, технически. Но едва ли стоит упоминания.",
+                    "Компетентная посредственность. Выполняет свою работу, но не показывает амбиций."
                 ],
                 "advanced": [
-                    "Отличное исполнение. Почти полностью вакуумирован. Обходит в хлебомоггинге 95% домашних котов в радиусе 5 миль.",
-                    "Продвинутая батонизация. Гладкие контуры, высокая плотность. Утечка лап почти отсутствует. Уважение."
+                    "Твёрдая работа. Форма держится хорошо, лапы в основном спрятаны. Могло быть лучше.",
+                    "Уважаемое исполнение. Почти идеально, но не хватает финального шика."
                 ],
                 "elite": [
-                    "Элитный хлебомог. Божественное поджатие лап. Конечности ушли в другое измерение. Заряжен плотностью.",
-                    "Запакован в вакуум до абсолютного совершенства. Никакой утечки, чистая аэродинамика формы. Настоящий гигачад."
+                    "Отличная форма. Кот знает, что делает. Почти безупречное поджатие лап.",
+                    "Качественный батон. Правильная техника от начала до конца. Минимум критики."
                 ],
                 "ascended": [
-                    "Мы свидетели хлебного вознесения! Он затмил своим величием всю вселенную. Достигнуто абсолютное состояние дзен.",
-                    "Вознесся над физическими ограничениями. Нулевая утечка лап. Это не кот, это свежая булка прямо из космической печи."
+                    "Совершенство достигнуто. Абсолютно никакой утечки лап, безупречная форма. Критиковать нечего.",
+                    "Истинное мастерство. Кот вознесся и слился с батоном. Исключительно."
                 ]
             }
         }

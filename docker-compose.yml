@@ -6,6 +6,7 @@ services:
       args:
         - INSTALL_LOCAL_VLM=${INSTALL_LOCAL_VLM:-false}
     container_name: loafrate-backend
+    gpus: all
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

@@ -22,7 +22,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 ARG INSTALL_LOCAL_VLM=false
 COPY requirements-local.txt /app/
 RUN if [ "$INSTALL_LOCAL_VLM" = "true" ]; then \
-      pip install --no-cache-dir -r requirements-local.txt; \
+      pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cu121 \
+        --extra-index-url https://pypi.org/simple \
+        -r requirements-local.txt; \
     fi
 
 # Copy project files
