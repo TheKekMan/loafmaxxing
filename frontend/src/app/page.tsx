@@ -50,6 +50,7 @@ interface AnalysisReport {
   roast: string;
   image_url: string;
   filename: string;
+  share_id: string;
 }
 
 const TRANSLATIONS = {
@@ -228,6 +229,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const t = TRANSLATIONS[lang];
+  const isRu = lang === "ru";
 
   // Cycling loading messages during analysis
   useEffect(() => {
@@ -433,27 +435,12 @@ export default function Home() {
     }
   });
 
-  const copyToClipboard = () => {
+  const openSharePage = () => {
     if (!analysisResult) return;
-    const isRu = lang === "ru";
-    const text = isRu 
-      ? `LoafRate ИИ-Оценка:\n` +
-        `Кот: ${analysisResult.filename}\n` +
-        `Индекс Батона: ${analysisResult.final_score}/10\n` +
-        `Класс Батона: ${analysisResult.class}\n` +
-        `Вердикт: ${analysisResult.verdict}\n` +
-        `Прожар: "${analysisResult.roast}"\n` +
-        `Оцени своего кота на LoafRate.dev`
-      : `LoafRate AI Evaluation:\n` +
-        `Cat: ${analysisResult.filename}\n` +
-        `Batone Score: ${analysisResult.final_score}/10\n` +
-        `Loaf Class: ${analysisResult.class}\n` +
-        `Verdict: ${analysisResult.verdict}\n` +
-        `Roast: "${analysisResult.roast}"\n` +
-        `Rate yours at LoafRate.dev`;
-      
-    navigator.clipboard.writeText(text);
+    const shareUrl = `${window.location.origin}/share/${analysisResult.share_id}`;
+    navigator.clipboard.writeText(shareUrl).catch(() => undefined);
     setCopied(true);
+    window.open(shareUrl, "_blank", "noopener,noreferrer");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -463,7 +450,7 @@ export default function Home() {
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none scanline z-0" />
 
       {/* Header */}
-      <header className="w-full glass-panel border-b border-orange-500/10 py-4 px-6 md:px-12 flex justify-between items-center z-10">
+      <header className="w-full glass-panel border-b border-orange-500/10 py-4 px-4 md:px-12 flex justify-between items-center gap-4 z-10">
         <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setStep("landing")}>
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-orange-500 to-amber-400 flex items-center justify-center font-bold text-black text-lg">
             L
@@ -473,7 +460,7 @@ export default function Home() {
           </span>
         </div>
         
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center gap-2 md:gap-4 min-w-0">
           {/* Language Switch Toggle */}
           <div className="flex items-center space-x-1 bg-zinc-900 border border-orange-500/20 rounded-lg p-0.5 text-xs font-mono">
             <button
@@ -494,10 +481,9 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="flex items-center space-x-2 text-xs font-mono text-zinc-400 bg-orange-950/20 px-3 py-1.5 rounded-full border border-orange-500/10">
+          <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-zinc-400 bg-orange-950/20 px-3 py-1.5 rounded-full border border-orange-500/10 max-w-[42vw]">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="hidden sm:inline">{t.sysActive}</span>
-            <span className="inline sm:hidden">{t.sysActiveShort}</span>
+            <span className="truncate">{t.sysActive}</span>
           </div>
         </div>
       </header>
@@ -517,17 +503,17 @@ export default function Home() {
               className="w-full max-w-4xl text-center flex flex-col items-center space-y-8"
             >
               {/* Badge */}
-              <div className="inline-flex items-center space-x-2 bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20 rounded-full px-4 py-1.5 text-orange-400 text-xs font-mono tracking-widest uppercase mb-2">
+              <div className={`inline-flex items-center space-x-2 bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20 rounded-full px-4 py-1.5 text-orange-400 text-xs font-mono ${isRu ? "tracking-normal" : "tracking-widest"} uppercase mb-2 max-w-full`}>
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{t.badge}</span>
+                <span className="break-words">{t.badge}</span>
               </div>
 
               {/* Title Section */}
               <div className="space-y-4">
-                <h1 className="font-orbitron font-black text-6xl md:text-8xl tracking-tight leading-none text-white text-glow-orange select-none">
+                <h1 className="font-orbitron font-black text-5xl sm:text-6xl md:text-8xl tracking-tight leading-none text-white text-glow-orange select-none">
                   LOAFRATE
                 </h1>
-                <h2 className="font-orbitron font-semibold text-xl md:text-3xl tracking-widest text-orange-400/90 uppercase">
+                <h2 className={`font-orbitron font-semibold text-lg sm:text-xl md:text-3xl ${isRu ? "tracking-normal max-w-3xl" : "tracking-widest"} text-orange-400/90 uppercase text-balance leading-tight`}>
                   {t.subtitle}
                 </h2>
               </div>
@@ -547,7 +533,7 @@ export default function Home() {
               <div className="pt-4">
                 <button
                   onClick={() => setStep("upload")}
-                  className="group relative px-8 py-4 bg-gradient-to-r from-orange-500 to-amber-400 text-black font-orbitron font-extrabold text-lg tracking-wider rounded-lg shadow-glow hover:shadow-glow-lg transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 flex items-center space-x-3 overflow-hidden"
+                  className={`group relative px-8 py-4 bg-gradient-to-r from-orange-500 to-amber-400 text-black font-orbitron font-extrabold ${isRu ? "text-base tracking-normal" : "text-lg tracking-wider"} rounded-lg shadow-glow hover:shadow-glow-lg transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 active:scale-95 flex items-center space-x-3 overflow-hidden`}
                 >
                   <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-amber-400 to-orange-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   <span className="relative z-10">{t.ctaButton}</span>
@@ -556,16 +542,16 @@ export default function Home() {
               </div>
 
               {/* Fake Credentials Panel */}
-              <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-6 pt-12 md:pt-16 max-w-3xl">
+              <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-5 pt-12 md:pt-16 max-w-4xl">
                 {[
                   { title: t.cred1Title, value: t.cred1Val, desc: t.cred1Desc },
                   { title: t.cred2Title, value: t.cred2Val, desc: t.cred2Desc },
                   { title: t.cred3Title, value: t.cred3Val, desc: t.cred3Desc }
                 ].map((item, idx) => (
-                  <div key={idx} className="glass-panel p-5 rounded-xl border border-orange-500/10 text-left hover:border-orange-500/20 transition-all duration-300">
-                    <h4 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">{item.title}</h4>
-                    <p className="text-lg font-orbitron font-semibold text-orange-400 mt-1">{item.value}</p>
-                    <p className="text-xs text-zinc-400 mt-1 leading-snug">{item.desc}</p>
+                  <div key={idx} className="glass-panel p-5 rounded-xl border border-orange-500/10 text-left hover:border-orange-500/20 transition-all duration-300 min-w-0">
+                    <h4 className={`text-[11px] font-mono text-zinc-500 uppercase ${isRu ? "tracking-normal" : "tracking-widest"} break-words`}>{item.title}</h4>
+                    <p className={`font-orbitron font-semibold text-orange-400 mt-1 leading-tight break-words ${isRu ? "text-base" : "text-lg"}`}>{item.value}</p>
+                    <p className="text-xs text-zinc-400 mt-2 leading-relaxed break-words">{item.desc}</p>
                   </div>
                 ))}
               </div>
@@ -754,7 +740,7 @@ export default function Home() {
             >
               {/* Top Summary Card */}
               <div className="glass-panel rounded-2xl border border-orange-500/15 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-4 min-w-0">
                   <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-orange-500/20 flex-shrink-0 bg-black/40">
                     {/* Render backend static image or fallback preview if static not loaded yet */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -770,17 +756,17 @@ export default function Home() {
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <div>
-                    <h3 className="font-orbitron font-extrabold text-xl text-white">{t.evalCompleted}</h3>
-                    <p className="text-xs font-mono text-zinc-500 uppercase mt-0.5 tracking-wider">
+                  <div className="min-w-0">
+                    <h3 className={`font-orbitron font-extrabold text-white leading-tight break-words ${isRu ? "text-base md:text-lg tracking-normal" : "text-xl"}`}>{t.evalCompleted}</h3>
+                    <p className={`text-xs font-mono text-zinc-500 uppercase mt-0.5 ${isRu ? "tracking-normal" : "tracking-wider"}`}>
                       {t.specimenId} {analysisResult.filename.slice(0, 16)}...
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <button
-                    onClick={copyToClipboard}
-                    className="px-4 py-2.5 bg-zinc-900 border border-orange-500/10 hover:border-orange-500/30 text-xs font-mono text-zinc-300 hover:text-white rounded-lg flex items-center space-x-2 transition-all"
+                    onClick={openSharePage}
+                    className="px-4 py-2.5 bg-zinc-900 border border-orange-500/10 hover:border-orange-500/30 text-xs font-mono text-zinc-300 hover:text-white rounded-lg flex items-center space-x-2 transition-all min-h-10"
                   >
                     {copied ? (
                       <>
@@ -796,7 +782,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={resetAll}
-                    className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-400 text-black font-orbitron font-bold text-xs tracking-wider rounded-lg flex items-center space-x-2 transition-all hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
+                    className={`px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-400 text-black font-orbitron font-bold text-xs ${isRu ? "tracking-normal" : "tracking-wider"} rounded-lg flex items-center space-x-2 transition-all hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] min-h-10`}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>{t.analyzeAnother}</span>
@@ -832,8 +818,8 @@ export default function Home() {
                     {/* Overall Score Details */}
                     <div className="p-6 flex items-center justify-between gap-4 bg-zinc-950/40">
                       <div>
-                        <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block">{t.overallClass}</span>
-                        <span className={`text-xl font-orbitron font-extrabold block mt-0.5 ${getLoafClassColor(analysisResult.class)}`}>
+                        <span className={`text-[10px] font-mono text-zinc-500 uppercase ${isRu ? "tracking-normal" : "tracking-widest"} block`}>{t.overallClass}</span>
+                        <span className={`text-lg md:text-xl font-orbitron font-extrabold block mt-0.5 leading-tight break-words ${getLoafClassColor(analysisResult.class)}`}>
                           {analysisResult.class}
                         </span>
                         <p className="text-xs text-zinc-400 mt-1 leading-snug line-clamp-2">
@@ -841,7 +827,7 @@ export default function Home() {
                         </p>
                       </div>
                       <div className="text-center flex-shrink-0">
-                        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider block">{t.batoneScore}</span>
+                        <span className={`text-[9px] font-mono text-zinc-500 uppercase ${isRu ? "tracking-normal" : "tracking-wider"} block`}>{t.batoneScore}</span>
                         <div className="w-16 h-16 rounded-full border-2 border-orange-500/30 flex flex-col items-center justify-center bg-orange-950/20 shadow-glow mt-1">
                           <span className="text-xl font-orbitron font-black text-orange-400">
                             {analysisResult.final_score.toFixed(1)}
@@ -857,12 +843,12 @@ export default function Home() {
                     <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 rounded-full filter blur-xl pointer-events-none" />
                     <div className="flex items-center space-x-2 text-red-400 border-b border-red-500/10 pb-2">
                       <Flame className="w-4 h-4 text-glow-red" />
-                      <span className="font-orbitron font-bold text-xs tracking-widest uppercase">{t.labRoast}</span>
+                      <span className={`font-orbitron font-bold text-xs ${isRu ? "tracking-normal" : "tracking-widest"} uppercase break-words`}>{t.labRoast}</span>
                     </div>
                     <blockquote className="italic text-zinc-300 text-sm leading-relaxed pt-1">
                       &ldquo;{analysisResult.roast}&rdquo;
                     </blockquote>
-                    <div className="flex justify-between items-center text-[10px] font-mono text-zinc-500 pt-2">
+                    <div className="flex flex-wrap justify-between items-center gap-2 text-[10px] font-mono text-zinc-500 pt-2">
                       <span>{t.ratingState}</span>
                       <span>{t.diagnosis}</span>
                     </div>
@@ -875,7 +861,7 @@ export default function Home() {
                   
                   {/* Radar Chart Display */}
                   <div className="glass-panel rounded-2xl border border-orange-500/15 p-6 flex flex-col items-center justify-center">
-                    <span className="self-start text-[10px] font-mono text-zinc-500 uppercase tracking-widest border-b border-orange-500/10 pb-2 w-full mb-4">
+                    <span className={`self-start text-[10px] font-mono text-zinc-500 uppercase ${isRu ? "tracking-normal" : "tracking-widest"} border-b border-orange-500/10 pb-2 w-full mb-4 break-words`}>
                       {t.dimensionMap}
                     </span>
                     <div className="w-full h-[240px] md:h-[280px]">
@@ -909,7 +895,7 @@ export default function Home() {
                           <button
                             key={key}
                             onClick={() => setActiveCategoryTab(key)}
-                            className={`flex-1 py-3.5 px-4 font-orbitron font-semibold text-xs tracking-wider flex flex-col items-center space-y-1 border-b-2 transition-all min-w-[100px] ${
+                            className={`flex-1 py-3.5 px-4 font-orbitron font-semibold text-xs ${isRu ? "tracking-normal" : "tracking-wider"} flex flex-col items-center space-y-1 border-b-2 transition-all min-w-[104px] ${
                               isActive 
                                 ? "border-orange-500 text-orange-400 bg-orange-950/10" 
                                 : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/40"
@@ -941,8 +927,8 @@ export default function Home() {
                             {/* Score header */}
                             <div className="flex justify-between items-center">
                               <div>
-                                <h4 className="font-orbitron font-extrabold text-lg text-white uppercase">{meta.label}</h4>
-                                <span className="text-[10px] font-mono text-orange-400/80 uppercase">
+                                <h4 className={`font-orbitron font-extrabold text-white uppercase leading-tight break-words ${isRu ? "text-base" : "text-lg"}`}>{meta.label}</h4>
+                                <span className="text-[10px] font-mono text-orange-400/80 uppercase break-words">
                                   #{meta.term}
                                 </span>
                               </div>
@@ -965,7 +951,7 @@ export default function Home() {
                             <div className="bg-zinc-950/50 rounded-xl p-4 border border-orange-500/10 flex items-start space-x-3">
                               <div className="w-2 h-2 rounded-full bg-orange-500 mt-1.5 flex-shrink-0 animate-ping" />
                               <div>
-                                <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block">{t.aiObservation}</span>
+                                <span className={`text-[10px] font-mono text-zinc-500 uppercase ${isRu ? "tracking-normal" : "tracking-widest"} block`}>{t.aiObservation}</span>
                                 <p className="text-zinc-200 text-sm mt-0.5 font-medium italic">
                                   &ldquo;{comment}&rdquo;
                                 </p>

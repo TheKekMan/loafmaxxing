@@ -8,6 +8,8 @@ Evaluate your cat's loafness and tuck discipline with the world's most advanced 
 * 📦 **Compression Density Index**: Measures core mass-to-fluff packing ratio.
 * 🧠 **Mental Loaf State**: Detects Zen vs Combat loafing behaviors.
 * 🍞 **Sourdough Crust Toastiness**: Grades coat color, shine, and toastiness.
+* **Public Share Pages**: Every analysis is saved to SQLite and can be opened at `/share/<id>`.
+* **Compressed Uploads**: Uploaded photos are stored as optimized JPEG files for faster sharing.
 
 ---
 
@@ -70,6 +72,9 @@ To stop the containers:
 ```bash
 docker compose down
 ```
+
+For remote production deployment with nginx, optional SSL, cloud/local model
+settings, and server maintenance commands, see [DEPLOY.md](DEPLOY.md).
 
 ---
 

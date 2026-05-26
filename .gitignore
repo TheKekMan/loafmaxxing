@@ -69,3 +69,11 @@ ehthumbs.db
 # Uploads / Static Assets
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# Local model weights
+backend/models/*
+!backend/models/.gitkeep
+
+# Local SQLite data
+backend/data/*
+!backend/data/.gitkeep

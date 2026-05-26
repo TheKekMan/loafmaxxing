@@ -11,12 +11,22 @@
 services:
   backend:
     ports: !reset []       # Remove direct port exposure from base file
+    volumes:
+      - uploads:/app/uploads
+      - data:/app/data
+      - ./backend/models:/app/models
     networks:
       - internal
     restart: always
 
   frontend:
     ports: !reset []       # Remove direct port exposure from base file
+    build:
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
+    environment:
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
     networks:
       - internal
     restart: always
@@ -42,6 +52,8 @@ services:
   certbot:
     image: certbot/certbot:latest
     container_name: loafrate-certbot
+    profiles:
+      - ssl
     volumes:
       - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
@@ -52,6 +64,7 @@ services:
 
 volumes:
   uploads:
+  data:
 
 networks:
   internal:

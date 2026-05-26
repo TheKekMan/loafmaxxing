@@ -6,8 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Dict, Any
+from PIL import Image, ImageOps
 
 from analyzer import VLMAnalyzer
+from storage import get_analysis, init_db, save_analysis
 
 app = FastAPI(
     title="LoafRate API",
@@ -31,6 +33,7 @@ app.add_middleware(
 # Ensure uploads directory exists
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+init_db()
 
 # Mount uploads directory to serve files statically (so frontend can render the analyzed image)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
@@ -40,6 +43,23 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 MODEL_TYPE = os.environ.get("LOAF_MODEL_TYPE", "mock")
 MODEL_PATH = os.environ.get("LOAF_MODEL_PATH", None)
 analyzer = VLMAnalyzer(model_type=MODEL_TYPE, model_path=MODEL_PATH)
+
+
+def save_compressed_upload(upload: UploadFile, target_path: str) -> None:
+    """
+    Store user images as compressed JPEG files to keep public share pages light.
+    """
+    try:
+        with Image.open(upload.file) as img:
+            img = ImageOps.exif_transpose(img)
+            img.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            img.save(target_path, format="JPEG", quality=82, optimize=True, progressive=True)
+    except Exception:
+        upload.file.seek(0)
+        with open(target_path, "wb") as buffer:
+            shutil.copyfileobj(upload.file, buffer)
 
 class HealthResponse(BaseModel):
     status: str
@@ -69,17 +89,13 @@ async def analyze(image: UploadFile = File(...), lang: str = "en"):
         raise HTTPException(status_code=400, detail="Uploaded file is not an image.")
 
     # 2. Generate unique filename to prevent overwriting
-    file_extension = os.path.splitext(image.filename)[1]
-    if not file_extension:
-        # Fallback if extension isn't found
-        file_extension = ".jpg"
-    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    share_id = uuid.uuid4().hex[:12]
+    unique_filename = f"{share_id}.jpg"
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
-    # 3. Save the image locally
+    # 3. Save a compressed copy locally
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+        save_compressed_upload(image, file_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded image: {str(e)}")
 
@@ -97,7 +113,21 @@ async def analyze(image: UploadFile = File(...), lang: str = "en"):
     # Serving it via the static mount `/uploads/filename`
     report["image_url"] = f"/uploads/{unique_filename}"
     report["filename"] = unique_filename
+    report["share_id"] = share_id
 
+    try:
+        save_analysis(share_id, lang, report)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save analysis report: {str(e)}")
+
+    return report
+
+
+@app.get("/reports/{share_id}")
+def get_report(share_id: str):
+    report = get_analysis(share_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Analysis report not found.")
     return report
 
 if __name__ == "__main__":

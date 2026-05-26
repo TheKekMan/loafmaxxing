@@ -17,6 +17,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Optional local VLM dependencies are large. Keep the default image light and
+# enable them with --build-arg INSTALL_LOCAL_VLM=true when needed.
+ARG INSTALL_LOCAL_VLM=false
+COPY requirements-local.txt /app/
+RUN if [ "$INSTALL_LOCAL_VLM" = "true" ]; then \
+      pip install --no-cache-dir -r requirements-local.txt; \
+    fi
+
 # Copy project files
 COPY . /app/
 

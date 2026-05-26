@@ -13,7 +13,7 @@ class VLMAnalyzer:
     Supports:
     - 'mock': deterministic image-aware mock ratings (bilingual RU/EN)
     - 'cloud': Gemini API (external cloud VLM, bilingual RU/EN)
-    - 'local': local Qwen2-VL-2B-Instruct model (lazy-loaded, bilingual RU/EN)
+    - 'local': local Qwen-family VLM model (lazy-loaded, bilingual RU/EN)
     """
     def __init__(self, model_type: str = "mock", model_path: Optional[str] = None):
         self.model_type = model_type.lower()
@@ -32,7 +32,7 @@ class VLMAnalyzer:
         
         if self.model_type == "cloud":
             return self._run_gemini_analysis(image_path, lang)
-        elif self.model_type in ["local", "qwen2-vl"]:
+        elif self.model_type in ["local", "qwen2-vl", "qwen3-vl"]:
             return self._run_local_vlm_analysis(image_path, lang)
         else:
             return self._run_pseudo_scientific_analysis(image_path, lang)
@@ -128,7 +128,7 @@ If language is "ru", translate the classes exactly as:
             
             res_json = response.json()
             text_content = res_json["candidates"][0]["content"]["parts"][0]["text"]
-            parsed_report = json.loads(text_content.strip())
+            parsed_report = self._parse_json_report(text_content)
             
             # Just to guarantee structure safety
             for key in ["scores", "final_score", "class", "verdict", "roast"]:
@@ -143,13 +143,13 @@ If language is "ru", translate the classes exactly as:
 
     def _run_local_vlm_analysis(self, image_path: str, lang: str) -> Dict[str, Any]:
         """
-        Loads the Qwen2-VL-2B-Instruct model lazily and runs local inference.
+        Loads a local Qwen-family VLM lazily and runs local inference.
         """
         if self.model is None:
-            print("[LoafRate AI] Lazy loading local Qwen2-VL-2B-Instruct model (GPU/CPU)...")
+            print("[LoafRate AI] Lazy loading local Qwen-family VLM model (GPU/CPU)...")
             try:
                 import torch
-                from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
+                from transformers import AutoProcessor
                 
                 model_path = self.model_path
                 if not model_path or not os.path.exists(model_path):
@@ -160,7 +160,8 @@ If language is "ru", translate the classes exactly as:
                     else:
                         raise ValueError(f"Model path '{model_path}' not found. Please download it first using download_model.py.")
 
-                self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                model_cls = self._get_local_model_class()
+                self.model = model_cls.from_pretrained(
                     model_path, 
                     torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32, 
                     device_map="auto"
@@ -223,8 +224,8 @@ If language is "ru", translate the classes exactly as:
                 {
                     "role": "user",
                     "content": [
-                        {"image": image_path},
-                        {"text": prompt},
+                        {"type": "image", "image": image_path},
+                        {"type": "text", "text": prompt},
                     ],
                 }
             ]
@@ -252,18 +253,54 @@ If language is "ru", translate the classes exactly as:
                 generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
             )[0]
             
-            cleaned_output = output_text.strip()
-            if cleaned_output.startswith("```"):
-                cleaned_output = cleaned_output.split("```")[1]
-                if cleaned_output.startswith("json"):
-                    cleaned_output = cleaned_output[4:]
-            
-            parsed_report = json.loads(cleaned_output.strip())
+            parsed_report = self._parse_json_report(output_text)
             return parsed_report
             
         except Exception as e:
             print(f"[LoafRate AI] Local VLM inference failed: {e}. Falling back to mock analysis.")
             return self._run_pseudo_scientific_analysis(image_path, lang)
+
+    def _get_local_model_class(self):
+        """
+        Resolve the best available Transformers class for Qwen-family VLMs.
+        Newer model families can be supported by upgrading transformers without
+        changing the analyzer code.
+        """
+        candidates = [
+            ("transformers", "Qwen3VLForConditionalGeneration"),
+            ("transformers", "Qwen2_5_VLForConditionalGeneration"),
+            ("transformers", "Qwen2VLForConditionalGeneration"),
+            ("transformers", "AutoModelForVision2Seq"),
+        ]
+        for module_name, class_name in candidates:
+            try:
+                module = __import__(module_name, fromlist=[class_name])
+                return getattr(module, class_name)
+            except (ImportError, AttributeError):
+                continue
+        raise ImportError("No supported local VLM class found in transformers.")
+
+    def _parse_json_report(self, text: str) -> Dict[str, Any]:
+        """
+        Parse JSON from direct API JSON responses or markdown-fenced model text.
+        """
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`").strip()
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].strip()
+
+        if not cleaned.startswith("{"):
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+            if start >= 0 and end > start:
+                cleaned = cleaned[start:end + 1]
+
+        parsed_report = json.loads(cleaned)
+        for key in ["scores", "final_score", "class", "verdict", "roast"]:
+            if key not in parsed_report:
+                raise KeyError(f"Missing key in VLM response: {key}")
+        return parsed_report
 
     def _run_pseudo_scientific_analysis(self, image_path: str, lang: str) -> Dict[str, Any]:
         """
