@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: loafrate-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/models:/app/models
+    environment:
+      - PORT=8000
+      - LOAF_MODEL_TYPE=${LOAF_MODEL_TYPE:-mock}
+      - LOAF_MODEL_PATH=${LOAF_MODEL_PATH:-/app/models/qwen2-vl-2b}
+      - LOAF_HF_MODEL_ID=${LOAF_HF_MODEL_ID:-Qwen/Qwen2-VL-2B-Instruct}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL_ID=${GEMINI_MODEL_ID:-gemini-2.5-flash}
+      - USE_CUDA=${USE_CUDA:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_ vars must be available at build time in Next.js
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: loafrate-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    restart: unless-stopped

@@ -1,0 +1,71 @@
+# Dependency directories
+node_modules/
+frontend/node_modules/
+
+# Secrets — NEVER commit .env
+.env
+# keep .env.example as documentation
+!.env.example
+
+# Next.js build outputs
+.next/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Next.js env files
+.env*.local
+frontend/.env*.local
+
+# Typescript build info
+*.tsbuildinfo
+frontend/next-env.d.ts
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+backend/venv/
+backend/.venv/
+backend/env/
+
+# Python caching & bytecode
+__pycache__/
+backend/__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI/Copilot history files
+.ai/
+
+# Uploads / Static Assets
+backend/uploads/*
+!backend/uploads/.gitkeep
