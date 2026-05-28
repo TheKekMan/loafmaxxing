@@ -1,12 +1,15 @@
 import os
 import uuid
 import shutil
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Dict, Any
 from PIL import Image, ImageOps
+
+load_dotenv()
 
 from analyzer import VLMAnalyzer
 from storage import get_analysis, init_db, save_analysis

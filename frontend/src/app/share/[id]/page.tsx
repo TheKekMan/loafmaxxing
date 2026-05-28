@@ -239,7 +239,13 @@ export default function SharedReportPage() {
                       <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
                         <PolarGrid stroke="rgba(255, 140, 0, 0.12)" />
                         <PolarAngleAxis dataKey="subject" tick={{ fill: "#a1a1aa", fontSize: 10 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fill: "#52525b", fontSize: 9 }} />
+                        <PolarRadiusAxis 
+                          angle={30} 
+                          domain={[0, 10]} 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fill: "#52525b", fontSize: 9 }} 
+                        />
                         <Radar dataKey="score" stroke="#ff8c00" fill="#ff8c00" fillOpacity={0.3} dot={{ r: 4, strokeWidth: 1 }} />
                       </RadarChart>
                     </ResponsiveContainer>

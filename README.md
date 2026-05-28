@@ -20,7 +20,12 @@ Evaluate your cat's loafness and tuck discipline with the world's most advanced 
 
 ## 🐳 Docker Setup
 
-You can run both the frontend and backend using Docker. Configure the VLM model type using environment variables:
+You can run both the frontend and backend using Docker. Configuration is driven by environment variables.
+
+### Environment Configuration
+* Copy `.env.example` to `.env` and update the values for your deployment.
+* `.env` is ignored by Git; use it for secrets like `GEMINI_API_KEY` and host-specific model settings.
+* `docker-compose.yml` already reads `.env` and passes the values into frontend/backend containers.
 
 ### Model Modes Available:
 1. **`mock`** (Default): Fast, deterministic, image-aware mock metrics. Ideal for development.
@@ -63,6 +68,14 @@ Set `LOAF_MODEL_TYPE=cloud` and `GEMINI_API_KEY` on your host system:
      LOAF_MODEL_TYPE=local docker compose up --build
      ```
    The local model will be volume-mounted and run on CPU/GPU depending on your system capability.
+
+### Remote Deployment Notes
+For remote deployment, use `.env` values from `.env.example` and set production-grade URLs and CORS origins.
+* Set `NEXT_PUBLIC_API_URL` to your public API endpoint.
+* Set `PUBLIC_BACKEND_URL` to the backend address exposed to users or proxies.
+* Set `DOMAIN` and `CORS_ORIGINS` to your actual site domains.
+* For cloud VLM, set `LOAF_MODEL_TYPE=cloud` and provide `GEMINI_API_KEY`.
+* For offline model deployment, set `LOAF_MODEL_TYPE=local`, `INSTALL_LOCAL_VLM=true`, and download the local model before starting.
 
 * **Frontend**: [http://localhost:3000](http://localhost:3000)
 * **Backend API**: [http://localhost:8000](http://localhost:8000)

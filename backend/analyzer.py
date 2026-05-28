@@ -37,114 +37,126 @@ class VLMAnalyzer:
         else:
             return self._run_pseudo_scientific_analysis(image_path, lang)
 
+    def _get_loaf_prompt(self, lang: str) -> str:
+        """
+        Returns the optimized system prompt for loafness evaluation in the target language.
+        """
+        is_ru = lang.lower() == "ru"
+        
+        class_mapping = """
+- final_score < 3.0: "Крах Батонизации"
+- final_score 3.0 to 4.9: "Недобулка"
+- final_score 5.0 to 6.9: "Домашний Батон"
+- final_score 7.0 to 8.9: "Продвинутый Батон"
+- final_score 9.0 to 9.4: "Элитный Батон"
+- final_score 9.5 to 10.0: "Вознесшаяся Буханка"
+        """ if is_ru else """
+- final_score < 3.0: "Cat Failure"
+- final_score 3.0 to 4.9: "Partial Loaf"
+- final_score 5.0 to 6.9: "Domestic Loaf"
+- final_score 7.0 to 8.9: "Advanced Baton"
+- final_score 9.0 to 9.4: "Elite Loaf"
+- final_score 9.5 to 10.0: "Ascended Bread Entity"
+        """
+
+        lang_instruction = "All comments, verdicts, and roasts MUST be written entirely in Russian (русский язык) without any English words." if is_ru else "All comments, verdicts, and roasts MUST be written entirely in English."
+
+        prompt = f"""You are a STRICT, critical feline batonization (loafness) expert judge.
+Your goal is to evaluate the cat specimen's posture and structure from the image. Do not be lenient.
+
+CRITERIA (rate each from 0.0 to 10.0):
+1. Paw Concealment (paw_concealment): Are ALL 4 paws tucked underneath the body? Any visible paw, claw, or leg requires a massive deduction.
+2. Loaf Geometry (loaf_geometry): Is the body in a clean, symmetric, rounded potato/bread-loaf shape? Sprawled or flat lying cats get low scores.
+3. Compression Density (compression_density): Is the body compact and tightly tucked? Loose or relaxed postures reduce density.
+4. Mental State (mental_loaf_state): Look of zen, calm commitment to the loaf vs alert, tense, or active (kickstands out).
+5. Fur Texture (fur_texture_rating): Coat quality and baked crust appearance (e.g. golden, caramelized, well-baked).
+
+SCORING FORMULA:
+final_score = (paw_concealment * 0.3) + (loaf_geometry * 0.25) + (compression_density * 0.2) + (mental_loaf_state * 0.15) + (fur_texture_rating * 0.1)
+
+CLASS CLASSIFICATION GUIDELINES:
+{class_mapping}
+
+OUTPUT SPECIFICATION:
+You must output a single valid JSON object containing exactly the structure below. Do not include markdown code block formatting (like ```json), and do not append any explanations before or after the JSON.
+{lang_instruction}
+
+JSON Schema:
+{{
+  "scores": {{
+    "paw_concealment": {{"score": float, "comment": "string"}},
+    "loaf_geometry": {{"score": float, "comment": "string"}},
+    "compression_density": {{"score": float, "comment": "string"}},
+    "mental_loaf_state": {{"score": float, "comment": "string"}},
+    "fur_texture_rating": {{"score": float, "comment": "string"}}
+  }},
+  "final_score": float,
+  "class": "string",
+  "verdict": "string",
+  "roast": "string"
+}}
+"""
+        return prompt
+
     def _run_gemini_analysis(self, image_path: str, lang: str) -> Dict[str, Any]:
         """
-        Calls Gemini API using the official Google GenAI SDK.
+        Calls Gemini API using the stable google.generativeai SDK (older, proven working version).
         """
         try:
             import google.generativeai as genai
         except ImportError:
-            print("[LoafRate AI] google-generativeai package is not installed. Falling back to mock.")
-            return self._run_pseudo_scientific_analysis(image_path, lang)
+            print("[LoafRate AI] google-generativeai package is not installed.")
+            raise RuntimeError("google-generativeai package is not installed.")
 
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            print("[LoafRate AI] Warning: GEMINI_API_KEY is not set. Falling back to mock analysis.")
-            return self._run_pseudo_scientific_analysis(image_path, lang)
-
-        # Инициализация клиента (можно вынести в __init__ позже)
-        genai.configure(api_key=api_key)
+            print("[LoafRate AI] Warning: GEMINI_API_KEY is not set.")
+            raise ValueError("GEMINI_API_KEY environment variable is not set.")
 
         # Модель (можно задать через GEMINI_MODEL_ID)
-        gemini_model = os.environ.get("GEMINI_MODEL_ID", "gemini-2.5-flash")  # или gemini-2.5-pro и т.д.
+        gemini_model = os.environ.get("GEMINI_MODEL_ID", "gemini-2.0-flash")
+        retries = int(os.environ.get("GENAI_RETRIES", "2"))
 
         try:
-            model = genai.GenerativeModel(
-                model_name=gemini_model,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "temperature": 0.2,
-                }
-            )
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(gemini_model)
 
             # Загружаем изображение
             image = Image.open(image_path)
+            prompt = self._get_loaf_prompt(lang)
 
-            prompt = f"""You are a STRICT feline batonization (loafness) judge. Rate this cat specimen CRITICALLY - do NOT be lenient.
-A true loaf (батон) is a SPECIFIC pose with MANDATORY requirements:
-- ALL 4 paws MUST be tucked underneath the body (not extended, not partially visible)
-- Tail MUST be completely hidden or wrapped around the body
-- Head should be lowered or level with the body
-- Entire body compressed into a compact, rectangular loaf shape
-- If ANY of these are missing/wrong, deduct significantly
+            last_error = None
+            for attempt in range(1, retries + 1):
+                try:
+                    response = model.generate_content(
+                        [prompt, image],
+                        generation_config=genai.types.GenerationConfig(
+                            response_mime_type="application/json",
+                            temperature=0.2,
+                        )
+                    )
 
-Analyze ONLY these parameters on a scale of 0.0 to 10.0. Be harsh:
-1. Paw Concealment - Are ALL 4 paws truly hidden? Partially visible = major deduction
-2. Loaf Geometry - Is the body actually in loaf pose? Not just laying - must be compressed loaf form
-3. Compression Density - Is the body genuinely compact? Loose/sprawled = low score
-4. Mental State - Does the cat look relaxed or tense? Is it actually committed to the loaf?
-5. Fur Texture - Coat quality (separate from pose, but affects overall impression)
+                    text_content = response.text
+                    parsed_report = self._parse_json_report(text_content)
 
-CRITICAL: If the cat is NOT in proper loaf pose, scores MUST be lower (5.0 max for paw/geometry/density).
+                    # Проверка структуры
+                    for key in ["scores", "final_score", "class", "verdict", "roast"]:
+                        if key not in parsed_report:
+                            raise KeyError(f"Missing key in Gemini response: {key}")
 
-Return a JSON object with this structure:
-{{
-  "scores": {{
-    "paw_concealment": {{"score": float, "comment": "string in {lang}"}},
-    "loaf_geometry": {{"score": float, "comment": "string in {lang}"}},
-    "compression_density": {{"score": float, "comment": "string in {lang}"}},
-    "mental_loaf_state": {{"score": float, "comment": "string in {lang}"}},
-    "fur_texture_rating": {{"score": float, "comment": "string in {lang}"}}
-  }},
-  "final_score": float,
-  "class": "string in {lang}",
-  "verdict": "string in {lang}",
-  "roast": "string in {lang}"
-}}
+                    return parsed_report
 
-Scoring formula: final_score = (paw*0.3 + geometry*0.25 + density*0.2 + mental*0.15 + fur*0.1)
-
-Class guidelines based on final_score (STRICT):
-- < 3.0: Cat Failure - Not a loaf, just a puddle
-- 3.0 to 4.9: Partial Loaf - Attempting but failing
-- 5.0 to 6.9: Domestic Loaf - Barely acceptable form
-- 7.0 to 8.9: Advanced Baton - Legitimate form with minor issues
-- 9.0 to 9.4: Elite Loaf - Proper technique, well executed
-- 9.5+: Ascended Bread Entity - Perfect loaf form
-
-Russian translations:
-- Cat Failure -> "Крах Батонизации"
-- Partial Loaf -> "Недобулка"
-- Domestic Loaf -> "Домашний Батон"
-- Advanced Baton -> "Продвинутый Батон"
-- Elite Loaf -> "Элитный Батон"
-- Ascended Bread Entity -> "Вознесшаяся Буханка"
-
-Language: {lang}
-If {lang}=="ru": все комментарии только на русском, без английских слов
-If {lang}=="en": all comments only in English, no Russian words
-
-JUDGE STRICTLY. DO NOT INFLATE SCORES. Base ratings on actual observable loaf form.
-"""
-
-            response = model.generate_content(
-                contents=[prompt, image],
-                request_options={"timeout": 25}
-            )
-
-            text_content = response.text
-            parsed_report = self._parse_json_report(text_content)
-
-            # Проверка структуры
-            for key in ["scores", "final_score", "class", "verdict", "roast"]:
-                if key not in parsed_report:
-                    raise KeyError(f"Missing key in Gemini response: {key}")
-
-            return parsed_report
+                except Exception as inner_exc:
+                    last_error = inner_exc
+                    if attempt < retries:
+                        print(f"[LoafRate AI] Gemini request failed (attempt {attempt}/{retries}): {inner_exc}. Retrying...")
+                        time.sleep(2.0)
+                        continue
+                    raise inner_exc
 
         except Exception as e:
-            print(f"[LoafRate AI] Gemini SDK call failed: {e}. Falling back to mock analysis.")
-            return self._run_pseudo_scientific_analysis(image_path, lang)
+            print(f"[LoafRate AI] Gemini SDK call failed: {e}.")
+            raise e
 
     def _run_local_vlm_analysis(self, image_path: str, lang: str) -> Dict[str, Any]:
         """
@@ -176,55 +188,11 @@ JUDGE STRICTLY. DO NOT INFLATE SCORES. Base ratings on actual observable loaf fo
                 print(f"[LoafRate AI] Model loaded successfully. Device map: {self.model.hf_device_map if hasattr(self.model, 'hf_device_map') else self.model.device}")
             except Exception as e:
                 print(f"[LoafRate AI] Failed to load local VLM: {e}")
-                print("[LoafRate AI] Please run 'python download_model.py' and install local dependencies: pip install torch torchvision transformers qwen-vl-utils accelerate")
-                print("[LoafRate AI] Falling back to mock analysis.")
                 self.model = None
-                return self._run_pseudo_scientific_analysis(image_path, lang)
+                raise RuntimeError(f"Failed to load local VLM model: {e}")
 
         try:
-            prompt = f"""Ты — крайне строгий и придирчивый судья кошачьей батонизации (loaf judge). 
-Твоя задача — оценивать котов максимально жёстко и без жалости.
-
-Настоящий "батон" (loaf) имеет СТРОГИЕ обязательные признаки:
-- ВСЕ 4 лапы полностью спрятаны под телом (ни одна лапа не должна быть видна или торчать)
-- Хвост полностью скрыт или плотно обёрнут вокруг тела
-- Тело сильно сжато в компактный прямоугольник
-- Голова опущена или на одном уровне с телом
-
-Если хотя бы один из этих пунктов нарушен — это НЕ батон. Максимальная оценка в таком случае — 5.0.
-
-Оценивай по шкале 0.0–10.0 ОЧЕНЬ ЖЁСТКО:
-
-1. Paw Concealment — Все 4 лапы действительно спрятаны?
-2. Loaf Geometry — Тело имеет чёткую loaf-форму или просто лежит?
-3. Compression Density — Насколько сильно сжато тело?
-4. Mental Loaf State — Кот расслаблен и committed к позе?
-5. Fur Texture — Качество шерсти (наименее важный параметр)
-
-Правила:
-- Если кот НЕ в правильной loaf-позе → оценки paw_concealment, loaf_geometry и compression_density не выше 5.0
-- Не льсти. Не оправдывай. Будь максимально критичным.
-- Комментарии должны быть короткими (1-2 предложения).
-
-Верни ТОЛЬКО валидный JSON, без всякого дополнительного текста:
-
-{{
-  "scores": {{
-    "paw_concealment": {{"score": float, "comment": "короткий комментарий на {lang}"}},
-    "loaf_geometry": {{"score": float, "comment": "короткий комментарий на {lang}"}},
-    "compression_density": {{"score": float, "comment": "короткий комментарий на {lang}"}},
-    "mental_loaf_state": {{"score": float, "comment": "короткий комментарий на {lang}"}},
-    "fur_texture_rating": {{"score": float, "comment": "короткий комментарий на {lang}"}}
-  }},
-  "final_score": float,
-  "class": "string",
-  "verdict": "string",
-  "roast": "string"
-}}
-
-Language: {lang}. Если ru — всё только на русском языке.
-Судьи строго. Не завышай оценки.
-"""
+            prompt = self._get_loaf_prompt(lang)
 
             messages = [
                 {
@@ -263,8 +231,8 @@ Language: {lang}. Если ru — всё только на русском язы
             return parsed_report
             
         except Exception as e:
-            print(f"[LoafRate AI] Local VLM inference failed: {e}. Falling back to mock analysis.")
-            return self._run_pseudo_scientific_analysis(image_path, lang)
+            print(f"[LoafRate AI] Local VLM inference failed: {e}.")
+            raise e
 
     def _get_local_model_class(self):
         """
@@ -288,122 +256,205 @@ Language: {lang}. Если ru — всё только на русском язы
 
     def _parse_json_report(self, text: str) -> Dict[str, Any]:
         """
-        Parse JSON from direct API JSON responses or markdown-fenced model text.
-        Handles malformed, truncated JSON with better recovery strategies.
+        Intelligently parses JSON from VLM response.
+        Attempts multiple repair strategies (fixing trailing commas, quotes, completing braces).
+        If JSON parsing fails completely, uses regular expressions to salvage and construct the report.
+        Strictly validates the schema and data types expected by the frontend.
         """
         import re
-        
+        import json
+
         cleaned = text.strip()
         
-        # Remove markdown code fences
+        # 1. Strip markdown code blocks
         if cleaned.startswith("```"):
             cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
             cleaned = re.sub(r'\s*```$', '', cleaned)
             cleaned = cleaned.strip()
+
+        # 2. Extract content between first '{' and last '}'
+        start_idx = cleaned.find("{")
+        end_idx = cleaned.rfind("}")
+        if start_idx >= 0 and end_idx >= 0 and end_idx > start_idx:
+            cleaned = cleaned[start_idx:end_idx+1]
         
-        # Find the start of JSON
-        if not cleaned.startswith("{"):
-            start = cleaned.find("{")
-            if start >= 0:
-                cleaned = cleaned[start:]
-        
-        # Try to intelligently complete truncated JSON
-        if cleaned.startswith("{"):
-            # Count unmatched quotes and braces
-            brace_count = 0
-            in_string = False
-            escape_next = False
-            last_key = None
-            
-            for i, char in enumerate(cleaned):
-                if escape_next:
-                    escape_next = False
-                    continue
-                    
-                if char == '\\' and in_string:
-                    escape_next = True
-                    continue
-                
-                if char == '"' and not escape_next:
-                    in_string = not in_string
-                    # Track keys for incomplete object detection
-                    if not in_string and i+1 < len(cleaned) and cleaned[i+1:i+2] == ':':
-                        # This was a key
-                        key_start = cleaned.rfind('"', 0, i-1)
-                        if key_start >= 0:
-                            last_key = cleaned[key_start+1:i]
-                    continue
-                
-                if not in_string:
-                    if char == '{':
-                        brace_count += 1
-                    elif char == '}':
-                        brace_count -= 1
-            
-            # If JSON is incomplete, try to complete it
-            if in_string or brace_count > 0:
-                # Close any open string
-                if in_string:
-                    cleaned = cleaned + '"'
-                # Close any open braces
-                if brace_count > 0:
-                    cleaned = cleaned + "}" * brace_count
-        
-        # Try to parse with various fallback strategies
-        parse_attempts = [
-            (cleaned, "original"),
-            (cleaned.replace('«', '"').replace('»', '"').replace('"', '"').replace('"', '"'), "quote_replacement"),
-        ]
-        
-        parsed_report = None
-        last_error = None
-        
-        for attempt_text, attempt_name in parse_attempts:
-            try:
-                parsed_report = json.loads(attempt_text)
-                break
-            except json.JSONDecodeError as e:
-                last_error = e
+        # 3. Quick replacement of smart/curly quotes
+        cleaned_repl = cleaned.replace('«', '"').replace('»', '"').replace('“', '"').replace('”', '"')
+
+        # 4. Try to repair common trailing comma issues in JSON
+        cleaned_repl = re.sub(r',\s*}', '}', cleaned_repl)
+        cleaned_repl = re.sub(r',\s*\]', ']', cleaned_repl)
+
+        # 5. Try completing unbalanced braces/quotes if truncated
+        brace_count = 0
+        in_string = False
+        escape_next = False
+        for i, char in enumerate(cleaned_repl):
+            if escape_next:
+                escape_next = False
                 continue
+            if char == '\\' and in_string:
+                escape_next = True
+                continue
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+            if not in_string:
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
         
+        if in_string:
+            cleaned_repl += '"'
+        if brace_count > 0:
+            cleaned_repl += '}' * brace_count
+
+        # Try standard parse
+        parsed_report = None
+        for txt in [cleaned_repl, cleaned]:
+            try:
+                parsed_report = json.loads(txt)
+                break
+            except json.JSONDecodeError:
+                continue
+
+        # 6. Regex fallback if JSON loading failed completely
         if parsed_report is None:
-            # Last resort: try to extract and salvage what we can
-            print(f"[LoafRate AI] JSON parsing attempts failed: {last_error}")
-            print(f"[LoafRate AI] Raw response (first 500 chars): {text[:500]}")
-            print(f"[LoafRate AI] Cleaned JSON (first 500 chars): {cleaned[:500]}")
+            print("[LoafRate AI] JSON parsing failed. Attempting regex extraction fallback...")
+            parsed_report = {}
             
-            # Return fallback with generic scores
-            parsed_report = {
-                "scores": {
-                    "paw_concealment": {"score": 3.0, "comment": "Parsing error - review required"},
-                    "loaf_geometry": {"score": 3.0, "comment": "Parsing error - review required"},
-                    "compression_density": {"score": 3.0, "comment": "Parsing error - review required"},
-                    "mental_loaf_state": {"score": 3.0, "comment": "Parsing error - review required"},
-                    "fur_texture_rating": {"score": 3.0, "comment": "Parsing error - review required"}
-                },
-                "final_score": 3.0,
-                "class": "Partial Loaf",
-                "verdict": "VLM parsing error - fallback scores applied",
-                "roast": "Model response was truncated/malformed"
-            }
-            # Don't raise, just return with fallback scores
-            return parsed_report
-        
-        # Validate required keys exist
-        for key in ["scores", "final_score", "class", "verdict", "roast"]:
-            if key not in parsed_report:
-                # Add missing keys with defaults
-                if key == "scores":
-                    parsed_report["scores"] = {
-                        "paw_concealment": {"score": 3.0, "comment": "Missing"},
-                        "loaf_geometry": {"score": 3.0, "comment": "Missing"},
-                        "compression_density": {"score": 3.0, "comment": "Missing"},
-                        "mental_loaf_state": {"score": 3.0, "comment": "Missing"},
-                        "fur_texture_rating": {"score": 3.0, "comment": "Missing"}
-                    }
+            # Helper to find float numbers
+            def find_float(pattern, default_val=5.0):
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    try:
+                        return float(match.group(1))
+                    except ValueError:
+                        pass
+                return default_val
+
+            # Helper to find strings
+            def find_string(pattern, default_val=""):
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    return match.group(1).strip()
+                return default_val
+
+            # Extract category scores and comments
+            scores = {}
+            categories = [
+                "paw_concealment", 
+                "loaf_geometry", 
+                "compression_density", 
+                "mental_loaf_state", 
+                "fur_texture_rating"
+            ]
+            
+            for cat in categories:
+                # Try finding score and comment for the category
+                cat_block_match = re.search(rf'"{cat}"\s*:\s*\{{([^}}]+)\}}', text, re.IGNORECASE)
+                score_val = 5.0
+                comment_val = "Not analyzed"
+                
+                if cat_block_match:
+                    block_text = cat_block_match.group(1)
+                    score_match = re.search(r'"score"\s*:\s*([0-9.]+)', block_text)
+                    if score_match:
+                        score_val = float(score_match.group(1))
+                    comment_match = re.search(r'"comment"\s*:\s*"([^"]+)"', block_text)
+                    if comment_match:
+                        comment_val = comment_match.group(1)
                 else:
-                    parsed_report[key] = f"Missing ({key})"
-        
+                    score_match = re.search(rf'"{cat}"[^}}]+?"score"\s*:\s*([0-9.]+)', text, re.IGNORECASE)
+                    if score_match:
+                        score_val = float(score_match.group(1))
+                    comment_match = re.search(rf'"{cat}"[^}}]+?"comment"\s*:\s*"([^"]+)"', text, re.IGNORECASE)
+                    if comment_match:
+                        comment_val = comment_match.group(1)
+                
+                scores[cat] = {"score": score_val, "comment": comment_val}
+
+            parsed_report["scores"] = scores
+            parsed_report["final_score"] = find_float(r'"final_score"\s*:\s*([0-9.]+)', -1.0)
+            parsed_report["class"] = find_string(r'"class"\s*:\s*"([^"]+)"', "")
+            parsed_report["verdict"] = find_string(r'"verdict"\s*:\s*"([^"]+)"', "")
+            parsed_report["roast"] = find_string(r'"roast"\s*:\s*"([^"]+)"', "")
+
+        # 7. Strictly validate and repair parsed report keys & types for Frontend
+        if not isinstance(parsed_report, dict):
+            raise ValueError("VLM response could not be parsed into a structured report.")
+
+        # Ensure scores exist
+        if "scores" not in parsed_report or not isinstance(parsed_report["scores"], dict):
+            parsed_report["scores"] = {}
+
+        # Re-verify and repair each score category
+        categories = ["paw_concealment", "loaf_geometry", "compression_density", "mental_loaf_state", "fur_texture_rating"]
+        for cat in categories:
+            if cat not in parsed_report["scores"] or not isinstance(parsed_report["scores"][cat], dict):
+                parsed_report["scores"][cat] = {"score": 5.0, "comment": "Value could not be parsed"}
+            else:
+                c_data = parsed_report["scores"][cat]
+                # Ensure score key exists and is float/int
+                if "score" not in c_data:
+                    c_data["score"] = 5.0
+                else:
+                    try:
+                        c_data["score"] = float(c_data["score"])
+                        # Clamp between 0.0 and 10.0
+                        c_data["score"] = max(0.0, min(10.0, c_data["score"]))
+                    except (ValueError, TypeError):
+                        c_data["score"] = 5.0
+                
+                # Ensure comment key exists and is string
+                if "comment" not in c_data or not c_data["comment"]:
+                    c_data["comment"] = "Evaluation complete"
+                else:
+                    c_data["comment"] = str(c_data["comment"])
+
+        # Validate final_score (recalculate if invalid or missing)
+        try:
+            parsed_report["final_score"] = float(parsed_report.get("final_score", -1))
+        except (ValueError, TypeError):
+            parsed_report["final_score"] = -1.0
+
+        if parsed_report["final_score"] < 0.0 or parsed_report["final_score"] > 10.0:
+            # Recalculate using formula
+            s = parsed_report["scores"]
+            calc_score = (
+                s["paw_concealment"]["score"] * 0.3 +
+                s["loaf_geometry"]["score"] * 0.25 +
+                s["compression_density"]["score"] * 0.2 +
+                s["mental_loaf_state"]["score"] * 0.15 +
+                s["fur_texture_rating"]["score"] * 0.1
+            )
+            parsed_report["final_score"] = round(calc_score, 2)
+
+        # Validate class, verdict, roast are non-empty strings
+        for k in ["class", "verdict", "roast"]:
+            val = parsed_report.get(k, "")
+            if not isinstance(val, str) or not val.strip():
+                if k == "class":
+                    score = parsed_report["final_score"]
+                    if score < 3.0: parsed_report["class"] = "Cat Failure"
+                    elif score < 5.0: parsed_report["class"] = "Partial Loaf"
+                    elif score < 7.0: parsed_report["class"] = "Domestic Loaf"
+                    elif score < 9.0: parsed_report["class"] = "Advanced Baton"
+                    elif score < 9.5: parsed_report["class"] = "Elite Loaf"
+                    else: parsed_report["class"] = "Ascended Bread Entity"
+                elif k == "verdict":
+                    parsed_report["verdict"] = "Standard feline loaf profile observed."
+                elif k == "roast":
+                    parsed_report["roast"] = "No particular comment on this loaf configuration."
+            else:
+                parsed_report[k] = val.strip()
+
+        # If it is empty or default placeholders were assigned due to complete failure, raise error
+        if parsed_report["verdict"] == "Standard feline loaf profile observed." and parsed_report["roast"] == "No particular comment on this loaf configuration.":
+            if len(text.strip()) < 30:
+                raise ValueError("The VLM response was empty or too short to contain a valid loaf assessment.")
+
         return parsed_report
 
     def _run_pseudo_scientific_analysis(self, image_path: str, lang: str) -> Dict[str, Any]:
